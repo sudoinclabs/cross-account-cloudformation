@@ -1,0 +1,151 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: Version 1.1 - This template creates a cross account role for SUDO Managed Services, granting access to SUDO managed your AWS account.
+
+Parameters:
+  SUDOAWSAccountNumber:
+    Type: String
+    Description: SUDO AWS Account number (Don't change it).
+    Default: 862135484809
+    AllowedValues:
+      - 862135484809
+  SUDOAdminAccess:
+    Type: String
+    Description: Choose true to Grant SUDO Managed Services full admin access to your AWS Account.
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  SUDOReviewAccess:
+    Type: String
+    Description: Choose false to revoke read only access for SUDO Managed Services.
+    Default: true
+    AllowedValues:
+      - true
+      - false
+  SUDOBillingAccess:
+    Type: String
+    Description: Choose true to grant Billing access to SUDO Managed Services
+    Default: false
+    AllowedValues:
+      - true
+      - false
+  CustomSNSTopicARN:
+    Type: String
+    Description: Enter SNS Topic ARN
+    Default: arn:aws:sns:us-east-1:473721677814:cf_backed_sns
+    
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterLabels:
+      SUDOAWSAccountNumber:
+        default: SUDO AWS account number
+      SUDOAdminAccess:
+        default: Administrator Access
+      SUDOReviewAccess:
+        default: Review (read-only) Access
+      SUDOBillingAccess:
+        default: Billing Access
+      CustomSNSTopicARN:
+        default: Custom SNS Topic ARN
+
+    ParameterGroups:
+      - Label:
+          default: SUDO Account information
+        Parameters:
+          - SUDOAWSAccountNumber
+      - Label:
+          default: AWS Access configuration
+        Parameters:
+          - SUDOAdminAccess
+          - SUDOReviewAccess
+          - SUDOBillingAccess
+          - CustomSNSTopicARN
+
+Conditions:
+  IsSUDOAdminAccess: !Equals [true, !Ref SUDOAdminAccess]
+  IsSUDOReviewAccess: !Equals [true, !Ref SUDOReviewAccess]
+  IsSUDOBillingAccess: !Equals [true, !Ref SUDOBillingAccess]
+
+Resources:
+  IAMRoleSUDOAdminAccess:
+    Condition: IsSUDOAdminAccess
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sudo-admin-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AdministratorAccess
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${SUDOAWSAccountNumber}:root
+            Action:
+              - sts:AssumeRole
+        Version: '2012-10-17'
+  IAMRoleSUDOReview:
+    Condition: IsSUDOReviewAccess
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sudo-review-role
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/ReadOnlyAccess
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${SUDOAWSAccountNumber}:root
+            Action:
+              - sts:AssumeRole
+        Version: '2012-10-17'
+  IAMRoleSUDOBilling:
+    Condition: IsSUDOBillingAccess
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: sudo-billing-role
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              AWS: !Sub arn:aws:iam::${SUDOAWSAccountNumber}:root
+            Action:
+              - sts:AssumeRole
+        Version: 2012-10-17
+  IAMPolicySUDOBilling:
+    Condition: IsSUDOBillingAccess
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: sudo-billing-access-policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          -
+            Effect: Allow
+            Resource: "*"
+            Action:
+              - aws-portal:View*
+      Roles:
+        - !Ref IAMRoleSUDOBilling
+  CustomSNS:
+    Type: Custom::SNSInvoker
+    Properties:
+      ServiceToken: !Ref CustomSNSTopicARN
+      customerID: !Ref "AWS::AccountId"
+      accountID: !Ref SUDOAWSAccountNumber
+      region: !Ref "AWS::Region"
+      SUDOAdminAccess: !Ref SUDOAdminAccess
+      SUDOReviewAccess: !Ref SUDOReviewAccess
+      SUDOBillingAccess: !Ref SUDOBillingAccess
+
+Outputs:
+  SUDOAdminAccessArn:
+    Condition: IsSUDOAdminAccess
+    Description: "SUDOAdminAccess IAM Role (sudo-admin-role) ARN"
+    Value: !GetAtt IAMRoleSUDOAdminAccess.Arn
+  SUDOReviewArn:
+    Condition: IsSUDOReviewAccess
+    Description: "SUDOReview IAM Role (sudo-review-role) ARN"
+    Value: !GetAtt IAMRoleSUDOReview.Arn
+  SUDOBillingArn:
+    Condition: IsSUDOBillingAccess
+    Description: "SUDOBilling IAM Role (sudo-billing-role) ARN"
+    Value: !GetAtt IAMRoleSUDOBilling.Arn
