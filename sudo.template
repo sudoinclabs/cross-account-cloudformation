@@ -137,6 +137,8 @@ Resources:
       SUDOBillingAccess: !Ref SUDOBillingAccess
 
 Outputs:
+  Status:
+    Value: !GetAtt CustomSNS.Status
   SUDOAdminAccessArn:
     Condition: IsSUDOAdminAccess
     Description: "SUDOAdminAccess IAM Role (sudo-admin-role) ARN"
