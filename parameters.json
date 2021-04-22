@@ -1,0 +1,34 @@
+[
+    {
+        "ParameterKey": "SUDOAWSAccountID",
+        "ParameterValue": "123456789123"
+    },
+    {
+        "ParameterKey": "SUDOExternalID",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "SourceIP",
+        "ParameterValue": ""
+    },
+    {
+        "ParameterKey": "EnforceMFA",
+        "ParameterValue": "false"
+    },
+    {
+        "ParameterKey": "SUDOAdminAccess",
+        "ParameterValue": "false"
+    },
+    {
+        "ParameterKey": "SUDOReviewAccess",
+        "ParameterValue": "true"
+    },
+    {
+        "ParameterKey": "SUDOBillingAccess",
+        "ParameterValue": "false"
+    },
+    {
+        "ParameterKey": "SUDOTopicARN",
+        "ParameterValue": "arn:aws:sns:us-east-1:123456789123:cf_backed_sns"
+    }
+]

@@ -1,0 +1,232 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Version 1.2 - This template creates a cross account role for SUDO Managed Services, granting access to SUDO managed your AWS account."
+
+Parameters:
+  SUDOAWSAccountID:
+    Type: "String"
+    AllowedPattern: '^\d{12}$'
+    ConstraintDescription: "Malformed input-Parameter SUDOAWSAccountID must only contain 12 numbers"
+
+  SUDOExternalID:
+    Type: "String"
+    Description: "(optional) A unique identifier required by another account to assume this role."
+
+  SourceIP:
+    Type: "String"
+    Description: "(optional) Whitelist source IP address"
+    AllowedPattern: '^(([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])\.){3}([0-9]|[1-9][0-9]|1[0-9]{2}|2[0-4][0-9]|25[0-5])(/[0-9]|/[0-3][0-9]|/0)?$|$^'
+    ConstraintDescription: "Requires a valid CIDR block"
+
+  EnforceMFA:
+    Type: "String"
+    Description: "Choose true to enforce MFA"
+    Default: false
+    AllowedValues:
+      - true
+      - false
+
+  SUDOAdminAccess:
+    Type: "String"
+    Description: "Choose true to grant SUDO Managed Services full admin access to your AWS Account"
+    Default: false
+    AllowedValues:
+      - true
+      - false
+
+  SUDOReviewAccess:
+    Type: "String"
+    Description: "Choose false to revoke read only access for SUDO Managed Services"
+    Default: true
+    AllowedValues:
+      - true
+      - false
+
+  SUDOBillingAccess:
+    Type: "String"
+    Description: "Choose true to grant Billing access to SUDO Managed Services"
+    Default: false
+    AllowedValues:
+      - true
+      - false
+
+  SUDOTopicARN:
+    Type: "String"
+    Description: "The ARN of the SNS Topic used to notify SUDO"
+    AllowedPattern: '^arn:aws:sns:\S+:\d+:\w+$'
+    ConstraintDescription: "Malformed input-Parameter SUDOTopicARN format is invalid"
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterLabels:
+      SUDOAWSAccountID:
+        default: "SUDO AWS account ID"
+      SUDOExternalID:
+        default: "SUDO External ID"
+      SourceIP:
+        default: "Source IP address"
+      EnforceMFA:
+        default: "Enforce MFA"
+      SUDOAdminAccess:
+        default: "Administrator access"
+      SUDOReviewAccess:
+        default: "Review (read-only) access"
+      SUDOBillingAccess:
+        default: "Billing access"
+      SUDOTopicARN:
+        default: "SNS topic ARN"
+
+    ParameterGroups:
+      - Label:
+          default: "SUDO Account information"
+        Parameters:
+          - "SUDOAWSAccountID"
+      - Label:
+          default: "AWS Access configuration"
+        Parameters:
+          - "SUDOExternalID"
+          - "SourceIP"
+          - "EnforceMFA"
+          - "SUDOAdminAccess"
+          - "SUDOReviewAccess"
+          - "SUDOBillingAccess"
+          - "SUDOTopicARN"
+
+Conditions:
+  HasMFA: !Equals [true, !Ref EnforceMFA]
+  HasSourceIP: !Not [!Equals [!Ref SourceIP, ""]]
+  HasSUDOExternalID: !Not [!Equals [!Ref SUDOExternalID, ""]]
+
+  HasSUDOAdminAccess: !Equals [true, !Ref SUDOAdminAccess]
+  HasSUDOReviewAccess: !Equals [true, !Ref SUDOReviewAccess]
+  HasSUDOBillingAccess: !Equals [true, !Ref SUDOBillingAccess]
+
+Resources:
+  IAMRoleSUDOAdminAccess:
+    Condition: HasSUDOAdminAccess
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "sudo-admin-role"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AdministratorAccess"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: !Sub "arn:aws:iam::${SUDOAWSAccountID}:root"
+            Action:
+              - "sts:AssumeRole"
+            Condition:
+              IpAddress: !If
+                - HasSourceIP
+                - "aws:SourceIp": !Ref SourceIP
+                - "aws:SourceIp": !Ref AWS::NoValue
+              StringEquals: !If
+                - HasSUDOExternalID
+                - "sts:ExternalId": !Ref SUDOExternalID
+                - "sts:ExternalId": !Ref AWS::NoValue
+              Bool: !If
+                - HasMFA
+                - "aws:MultiFactorAuthPresent": !Ref EnforceMFA
+                - "aws:MultiFactorAuthPresent": !Ref AWS::NoValue
+        Version: "2012-10-17"
+
+  IAMRoleSUDOReview:
+    Condition: HasSUDOReviewAccess
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "sudo-review-role"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/ReadOnlyAccess"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: !Sub arn:aws:iam::${SUDOAWSAccountID}:root
+            Action:
+              - "sts:AssumeRole"
+            Condition:
+              IpAddress: !If
+                - HasSourceIP
+                - "aws:SourceIp": !Ref SourceIP
+                - "aws:SourceIp": !Ref AWS::NoValue
+              StringEquals: !If
+                - HasSUDOExternalID
+                - "sts:ExternalId": !Ref SUDOExternalID
+                - "sts:ExternalId": !Ref AWS::NoValue
+              Bool: !If
+                - HasMFA
+                - "aws:MultiFactorAuthPresent": !Ref EnforceMFA
+                - "aws:MultiFactorAuthPresent": !Ref AWS::NoValue
+        Version: "2012-10-17"
+
+  IAMRoleSUDOBilling:
+    Condition: HasSUDOBillingAccess
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: "sudo-billing-role"
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              AWS: !Sub arn:aws:iam::${SUDOAWSAccountID}:root
+            Action:
+              - "sts:AssumeRole"
+            Condition:
+              IpAddress: !If
+                - HasSourceIP
+                - "aws:SourceIp": !Ref SourceIP
+                - "aws:SourceIp": !Ref AWS::NoValue
+              StringEquals: !If
+                - HasSUDOExternalID
+                - "sts:ExternalId": !Ref SUDOExternalID
+                - "sts:ExternalId": !Ref AWS::NoValue
+              Bool: !If
+                - HasMFA
+                - "aws:MultiFactorAuthPresent": !Ref EnforceMFA
+                - "aws:MultiFactorAuthPresent": !Ref AWS::NoValue
+        Version: "2012-10-17"
+
+  IAMPolicySUDOBilling:
+    Condition: HasSUDOBillingAccess
+    Type: "AWS::IAM::Policy"
+    Properties:
+      PolicyName: "sudo-billing-access-policy"
+      PolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Resource: "*"
+            Action:
+              - "aws-portal:View*"
+      Roles:
+        - !Ref IAMRoleSUDOBilling
+
+  SNSCustomResource:
+    Type: "AWS::CloudFormation::CustomResource"
+    Properties:
+      ServiceToken: !Ref SUDOTopicARN
+      CustomerAWSAccountID: !Ref AWS::AccountId
+      CustomerAWSRegion: !Ref AWS::Region
+      SUDOAWSAccountID: !Ref SUDOAWSAccountID
+      SUDOAdminAccess: !Ref SUDOAdminAccess
+      SUDOReviewAccess: !Ref SUDOReviewAccess
+      SUDOBillingAccess: !Ref SUDOBillingAccess
+      SUDOExternalID: !Ref SUDOExternalID
+      SourceIP: !Ref SourceIP
+      EnforceMFA: !Ref EnforceMFA
+
+Outputs:
+  Status:
+    Value: !GetAtt SNSCustomResource.Status
+  SUDOAdminAccessArn:
+    Condition: HasSUDOAdminAccess
+    Description: "SUDOAdminAccess IAM Role (sudo-admin-role) ARN"
+    Value: !GetAtt IAMRoleSUDOAdminAccess.Arn
+  SUDOReviewArn:
+    Condition: HasSUDOReviewAccess
+    Description: "SUDOReview IAM Role (sudo-review-role) ARN"
+    Value: !GetAtt IAMRoleSUDOReview.Arn
+  SUDOBillingArn:
+    Condition: HasSUDOBillingAccess
+    Description: "SUDOBilling IAM Role (sudo-billing-role) ARN"
+    Value: !GetAtt IAMRoleSUDOBilling.Arn

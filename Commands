@@ -1,0 +1,14 @@
+# Create a profile with credentials
+aws configure --profile test
+
+# List avaiable aws profiles
+aws configure list-profiles
+
+# Create Stack
+aws cloudformation create-stack --stack-name sudo-access --template-body file://sudo-access-template.yml --parameters file://parameters.json --capabilities CAPABILITY_NAMED_IAM --profile test
+
+# Update Stack
+aws cloudformation update-stack --stack-name sudo-access --use-previous-template --parameters --parameters file://parameters.json --capabilities CAPABILITY_NAMED_IAM --profile test
+
+# Delete Stack
+aws cloudformation delete-stack --stack-name sudo-access --profile test
